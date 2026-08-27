@@ -56,14 +56,16 @@ class Jbuilder
     # Renders the partial an Active Model object names through +to_partial_path+,
     # assigning the object to the local ActionView would have derived from that
     # path. Returns false when the path needs the controller namespace merged
-    # into it, which is left to ActionView.
+    # into it, or isn't one a local can be named after, both of which are left
+    # to ActionView.
     def render_object(object, locals)
       object = object.to_model if object.respond_to?(:to_model)
       path = object.to_partial_path
 
       return false unless _plain_object_path?(path)
 
-      locals[_local_name(path)] = object
+      name = _local_name(path) or return false
+      locals[name] = object
       _render path, locals, locals.keys, nil
 
       true
@@ -138,7 +140,11 @@ class Jbuilder
     def _local_name(path)
       LOCAL_NAMES.compute_if_absent(path) do
         base = path.end_with?(?/) ? '' : ::File.basename(path)
-        base[/\A_?(.*?)(?:\.\w+)*\z/, 1].to_sym
+        name = base[/\A_?(.*?)(?:\.\w+)*\z/, 1]
+
+        # ActionView raises its own ArgumentError for a path no local can be
+        # named after; let it be the one to say so.
+        name ? name.to_sym : false
       end
     end
   end

@@ -147,6 +147,20 @@ class JbuilderTemplateTest < ActiveSupport::TestCase
     assert_equal "Chris Harris", result["namespaced"]
   end
 
+  test "partial for an Active Model whose path cannot name a local" do
+    racer = Class.new(Racer) do
+      def to_partial_path
+        "racers/not\na\nlocal"
+      end
+    end.new(123, "Chris Harris")
+
+    error = assert_raises ActionView::Template::Error do
+      render('json.partial! @racer', racer: racer)
+    end
+
+    assert_includes error.cause.message, "not a valid Ruby identifier"
+  end
+
   test "a partial that raises reports the partial that raised" do
     error = assert_raises ActionView::Template::Error do
       render('json.partial! "kaboom"')
