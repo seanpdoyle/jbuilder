@@ -26,6 +26,10 @@ class JbuilderTemplateTest < ActiveSupport::TestCase
     "_post.json.jbuilder"         => POST_PARTIAL,
     "racers/_racer.json.jbuilder" => RACER_PARTIAL,
     "_collection.json.jbuilder"   => COLLECTION_PARTIAL,
+    "_kaboom.json.jbuilder"       => "raise 'Kaboom'",
+
+    # Rendered when a namespaced controller prefixes an Active Model's partial path.
+    "admin/racers/_racer.json.jbuilder" => "json.namespaced racer.name",
 
     # Ensure we find only Jbuilder partials from within Jbuilder templates.
     "_post.html.erb" => "Hello world!"
@@ -88,6 +92,73 @@ class JbuilderTemplateTest < ActiveSupport::TestCase
     assert_equal 123, result["id"]
     assert_equal "Chris Harris", result["name"]
     assert_equal true, result["highlighted"]
+  end
+
+  test "partial by name in a subdirectory" do
+    result = render('json.partial! "racers/racer", racer: @racer', racer: Racer.new(123, "Chris Harris"))
+    assert_equal 123, result["id"]
+    assert_equal "Chris Harris", result["name"]
+  end
+
+  test "partial by name finds only Jbuilder partials" do
+    result = render('json.partial! "post", post: @post', post: POSTS.first)
+    assert_equal "Post #1", result["body"]
+  end
+
+  test "the same partial rendered with different locals" do
+    result = render(<<-JBUILDER, post: POSTS.first)
+      json.plain do
+        json.partial! "post", post: @post
+      end
+      json.titled do
+        json.partial! "post", post: @post, include_title: true
+      end
+    JBUILDER
+
+    assert_nil result["plain"]["title"]
+    assert_equal "Title 1", result["titled"]["title"]
+  end
+
+  test "partial by name with a format override" do
+    result = render('json.partial! "partial", formats: [:json], content: "hello"')
+    assert_equal "hello", result["content"]
+  end
+
+  test "partial rendering is instrumented" do
+    events = capture_events("render_partial.action_view") do
+      render('json.partial! "partial", content: "hello"')
+    end
+
+    assert_equal 1, events.size
+    assert_includes events.first.payload[:identifier], "_partial.json.jbuilder"
+  end
+
+  test "Active Model partial rendering is instrumented" do
+    events = capture_events("render_partial.action_view") do
+      render('json.partial! @racer', racer: Racer.new(123, "Chris Harris"))
+    end
+
+    assert_equal 1, events.size
+    assert_includes events.first.payload[:identifier], "racers/_racer.json.jbuilder"
+  end
+
+  test "partial for Active Model under a namespaced controller" do
+    result = render('json.partial! @racer', { racer: Racer.new(123, "Chris Harris") }, [ "admin/racers" ])
+    assert_equal "Chris Harris", result["namespaced"]
+  end
+
+  test "a partial that raises reports the partial that raised" do
+    error = assert_raises ActionView::Template::Error do
+      render('json.partial! "kaboom"')
+    end
+
+    assert_equal "Kaboom", error.cause.message
+  end
+
+  test "a partial that cannot be found raises" do
+    assert_raises ActionView::Template::Error do
+      render('json.partial! "nonexistent"')
+    end
   end
 
   test "partial collection by name with symbol local" do
@@ -447,14 +518,25 @@ class JbuilderTemplateTest < ActiveSupport::TestCase
       JSON.load render_without_parsing(*args)
     end
 
-    def render_without_parsing(source, assigns = {})
-      view = build_view(fixtures: PARTIALS.merge("source.json.jbuilder" => source), assigns: assigns)
+    def render_without_parsing(source, assigns = {}, prefixes = [ "" ])
+      view = build_view(fixtures: PARTIALS.merge("source.json.jbuilder" => source), assigns: assigns, prefixes: prefixes)
       view.render(template: "source")
+    end
+
+    def capture_events(name)
+      events = []
+      subscriber = ActiveSupport::Notifications.subscribe(name) do |*args|
+        events << ActiveSupport::Notifications::Event.new(*args)
+      end
+      yield
+      events
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
     end
 
     def build_view(options = {})
       resolver = ActionView::FixtureResolver.new(options.fetch(:fixtures))
-      lookup_context = ActionView::LookupContext.new([ resolver ], {}, [""])
+      lookup_context = ActionView::LookupContext.new([ resolver ], {}, options.fetch(:prefixes, [""]))
       controller = ActionView::TestCase::TestController.new
 
       view = ActionView::Base.with_empty_template_cache.new(lookup_context, options.fetch(:assigns, {}), controller)
