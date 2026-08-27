@@ -1,14 +1,23 @@
 # frozen_string_literal: true
 
-# Measures the cost of rendering Jbuilder partials.
+# Measures the cost of rendering Jbuilder partials, in microseconds per render
+# of a template that renders 100 partials.
 #
 #   bundle exec ruby bench/partials.rb            # timings
-#   bundle exec ruby bench/partials.rb --allocs   # allocation counts
+#   bundle exec ruby bench/partials.rb --allocs   # objects allocated per render
+#   bundle exec ruby bench/partials.rb --json     # machine readable
 #
-# Pass --json to emit machine readable results, which makes it easy to diff two
-# revisions:
+# To compare two revisions, run the same script against each and diff the JSON.
+# A worktree keeps both around at once, and alternating the runs keeps a noisy
+# machine from favouring whichever one went first:
 #
-#   git stash && bundle exec ruby bench/partials.rb --json > /tmp/before.json
+#   git worktree add /tmp/before <sha>
+#   cp -r bench /tmp/before/
+#   (cd /tmp/before && bundle exec ruby bench/partials.rb --json) > /tmp/before.json
+#   bundle exec ruby bench/partials.rb --json > /tmp/after.json
+#
+# ITERATIONS and TRIALS tune how long a run takes; LOG_LEVEL is read by
+# bench/support.rb.
 
 require_relative "support"
 require "benchmark"
@@ -98,7 +107,7 @@ results = {}
 
 if ARGV.include?("--allocs")
   views.each do |name, view|
-      results[name] = measure_allocations { Bench.render(view) }
+    results[name] = measure_allocations { Bench.render(view) }
   end
 else
   # Report the fastest of several trials: the slow ones are the machine's noise,
