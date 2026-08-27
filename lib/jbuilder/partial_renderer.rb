@@ -25,6 +25,14 @@ class Jbuilder
     NO_DETAILS = {}.freeze
     NO_PREFIXES = [].freeze
 
+    # Rails 8.2 renamed the raising lookup to LookupContext#find!, and left #find
+    # as the one that returns nil.
+    FIND_TEMPLATE = ::ActionView::LookupContext.method_defined?(:find!) ? :find! : :find_template
+
+    # LookupContext#details_key is how we tell that a lookup's answer is still
+    # good. Without it we can still render, just without remembering anything.
+    MEMOIZABLE = ::ActionView::LookupContext.method_defined?(:details_key)
+
     # ActionView derives a partial's local name from its path; that never changes
     # for a given path, so it's worth remembering across requests.
     LOCAL_NAMES = ::Concurrent::Map.new
@@ -108,7 +116,7 @@ class Jbuilder
     # to be reused at all.
     def _lookup_context
       lookup_context = @context.lookup_context
-      details_key = lookup_context.details_key
+      details_key = MEMOIZABLE && lookup_context.details_key
 
       unless @lookup_context.equal?(lookup_context) && @details_key.equal?(details_key)
         @lookup_context = lookup_context
@@ -123,7 +131,7 @@ class Jbuilder
       prefixes = partial.include?(?/) ? NO_PREFIXES : lookup_context.prefixes
       details = handlers ? { handlers: ::Kernel.Array(handlers) } : NO_DETAILS
 
-      lookup_context.find_template(partial, prefixes, true, template_keys, details)
+      lookup_context.public_send(FIND_TEMPLATE, partial, prefixes, true, template_keys, details)
     end
 
     # ActionView prefixes an object's partial path with the controller namespace
