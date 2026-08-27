@@ -28,6 +28,7 @@ class Jbuilder
     def initialize(lookup_context, options, &scope)
       super(lookup_context, options)
       @scope = scope
+      @json = options[:locals].fetch(:json)
     end
 
     private
@@ -40,9 +41,7 @@ class Jbuilder
         json.merge!(templates.map(&:body))
       end
 
-      def json
-        @options[:locals].fetch(:json)
-      end
+      attr_reader :json
 
       def collection_with_template(view, template, layout, collection)
         super(view, template, layout, ScopedIterator.new(collection, @scope))

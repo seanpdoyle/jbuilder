@@ -2,6 +2,7 @@
 
 require 'jbuilder/jbuilder'
 require 'jbuilder/collection_renderer'
+require 'jbuilder/partial_renderer'
 require 'action_dispatch/http/mime_type'
 require 'active_support/cache'
 
@@ -15,6 +16,7 @@ class JbuilderTemplate < Jbuilder
   def initialize(context, options = nil)
     @context = context
     @cached_root = nil
+    @partial_renderer = nil
 
     options.nil? ? super() : super(**options)
   end
@@ -176,8 +178,17 @@ class JbuilderTemplate < Jbuilder
       end
     else
       options[:locals][:json] = self
-      @context.render options
+
+      if _partial_renderer.renders?(options)
+        _partial_renderer.render options
+      else
+        @context.render options
+      end
     end
+  end
+
+  def _partial_renderer
+    @partial_renderer ||= PartialRenderer.new(@context)
   end
 
   def _cache_fragment_for(key, options, &block)
@@ -247,7 +258,11 @@ class JbuilderTemplate < Jbuilder
   end
 
   def _render_active_model_partial(object)
-    @context.render object, json: self
+    locals = { json: self }
+
+    unless _partial_renderer.render_object(object, locals)
+      @context.render object, json: self
+    end
   end
 end
 
