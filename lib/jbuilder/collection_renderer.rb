@@ -6,28 +6,31 @@ require 'action_view/renderer/collection_renderer'
 
 class Jbuilder
   class CollectionRenderer < ::ActionView::CollectionRenderer # :nodoc:
+    # Renders each element of the collection into its own scope on the builder,
+    # so that a partial only ever sees the attributes it set itself.
     class ScopedIterator < ::SimpleDelegator # :nodoc:
       include Enumerable
 
-      def initialize(obj, scope)
+      def initialize(obj, json)
         super(obj)
-        @scope = scope
+        @json = json
       end
 
       def each_with_info
         return enum_for(:each_with_info) unless block_given?
 
+        json = @json
+
         __getobj__.each_with_info do |object, info|
-          @scope.call { yield(object, info) }
+          json.__send__(:_scope) { yield(object, info) }
         end
       end
     end
 
     private_constant :ScopedIterator
 
-    def initialize(lookup_context, options, &scope)
-      super(lookup_context, options)
-      @scope = scope
+    def initialize(lookup_context, options)
+      super
       @json = options[:locals].fetch(:json)
     end
 
@@ -44,7 +47,7 @@ class Jbuilder
       attr_reader :json
 
       def collection_with_template(view, template, layout, collection)
-        super(view, template, layout, ScopedIterator.new(collection, @scope))
+        super(view, template, layout, ScopedIterator.new(collection, @json))
       end
   end
 

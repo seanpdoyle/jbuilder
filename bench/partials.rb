@@ -69,6 +69,7 @@ SCENARIOS = {
 }
 
 ITERATIONS = Integer(ENV.fetch("ITERATIONS", 200))
+TRIALS = Integer(ENV.fetch("TRIALS", 7))
 
 views = SCENARIOS.transform_values do |templates|
   view = Bench.view_for(templates)
@@ -100,11 +101,17 @@ if ARGV.include?("--allocs")
       results[name] = measure_allocations { Bench.render(view) }
   end
 else
+  # Report the fastest of several trials: the slow ones are the machine's noise,
+  # not the code's, and the minimum is what moves when the code actually changes.
   views.each do |name, view|
-    3.times { ITERATIONS.times { Bench.render(view) } } # warmup
-    GC.start
-    elapsed = Benchmark.realtime { ITERATIONS.times { Bench.render(view) } }
-    results[name] = (elapsed / ITERATIONS) * 1_000_000 # microseconds per render
+    2.times { ITERATIONS.times { Bench.render(view) } } # warmup
+
+    best = TRIALS.times.map do
+      GC.start
+      Benchmark.realtime { ITERATIONS.times { Bench.render(view) } }
+    end.min
+
+    results[name] = (best / ITERATIONS) * 1_000_000 # microseconds per render
   end
 end
 

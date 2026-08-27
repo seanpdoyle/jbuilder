@@ -169,7 +169,7 @@ class JbuilderTemplate < Jbuilder
 
       if collection.present?
         results = CollectionRenderer
-          .new(@context.lookup_context, options) { |&block| _scope(&block) }
+          .new(@context.lookup_context, options)
           .render_collection_with_partial(collection, partial, @context, nil)
 
         _array if results.respond_to?(:body) && results.body.nil?
