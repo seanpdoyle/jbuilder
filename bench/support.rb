@@ -43,18 +43,22 @@ class Racer < Struct.new(:id, :name)
   include ActiveModel::Conversion
 end
 
-Class.new(Rails::Application) do
-  config.secret_key_base = "secret"
-  config.eager_load = false
-end.initialize!
-
-ActionView::Base.inspect
-
 # Rendering a partial emits `render_partial.action_view`, and Action View's log
 # subscriber formats a line for every one of them at :debug. Default to :info so
 # the numbers reflect a production log level; set LOG_LEVEL=debug to see what
-# development pays.
+# development pays. The log itself goes to /dev/null: formatting the line is the
+# cost worth measuring, while a log file that grows by hundreds of megabytes over
+# a run is not, and it makes back-to-back runs disagree with each other.
+Class.new(Rails::Application) do
+  config.secret_key_base = "secret"
+  config.eager_load = false
+  config.logger = ActiveSupport::Logger.new(File::NULL)
+end.initialize!
+
+# Set on the logger the subscribers are already holding, not on a replacement.
 Rails.logger.level = ENV.fetch("LOG_LEVEL", "info")
+
+ActionView::Base.inspect
 
 module BenchmarkSupport
   extend self
