@@ -376,8 +376,12 @@ class Jbuilder
     object.respond_to?(:map) && object.respond_to?(:count) && !(::Struct === object)
   end
 
+  # BLANK is the only Blank Jbuilder makes, and Blank#== already answers true for
+  # any other one, so asking whether the value is a Blank at all is the same
+  # question -- and one method call instead of three, on a path that runs several
+  # times per key.
   def _blank?(value=@attributes)
-    BLANK == value
+    ::Jbuilder::Blank === value
   end
 end
 
